@@ -1,3 +1,12 @@
+dulwich (0.9.7-3) UNRELEASED; urgency=medium
+
+  * Add 02_cve_2015-0838: Fix buffer overflow in C implementation of
+    apply_delta (CVE-2015-0838). Closes: #780958
+  * Add 03_cve_2014-9706: Don't allow writing to files under .git/ when
+    checking out working trees (CVE-2014-9706). Closes: #780989
+
+ -- Jelmer Vernooij <jelmer@debian.org>  Tue, 24 Mar 2015 22:34:34 +0000
+
 dulwich (0.9.7-2) unstable; urgency=medium
 
   * Require at least Python 2.7. Closes: #753519

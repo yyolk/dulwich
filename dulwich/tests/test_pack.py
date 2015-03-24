@@ -28,6 +28,7 @@ import tempfile
 import zlib
 
 from dulwich.errors import (
+    ApplyDeltaError,
     ChecksumMismatch,
     )
 from dulwich.file import (
@@ -180,6 +181,14 @@ class TestPackDeltas(TestCase):
     def test_overflow_64k(self):
         self.skipTest("big strings don't work yet")
         self._test_roundtrip(self.test_string_huge, self.test_string_huge)
+
+    def test_dest_overflow(self):
+        self.assertRaises(
+            ApplyDeltaError,
+            apply_delta, 'a'*0x10000, '\x80\x80\x04\x80\x80\x04\x80' + 'a'*0x10000)
+        self.assertRaises(
+            ApplyDeltaError,
+            apply_delta, '', '\x00\x80\x02\xb0\x11\x11')
 
 
 class TestPackData(PackTests):

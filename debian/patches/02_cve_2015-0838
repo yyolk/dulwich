@@ -1,0 +1,111 @@
+commit b25e8390074060ea2aed25cf070b8e98b85a3875
+Author: Jelmer Vernooĳ <jelmer@google.com>
+Date:   Fri Mar 6 12:29:07 2015 +0000
+
+    Fix buffer overflow in C version of apply_delta().
+    
+    This is CVE-2015-0838.
+    
+    Thanks to Ivan Fratric of the Google Security Team for
+    reporting this issue.
+
+diff --git a/dulwich/_pack.c b/dulwich/_pack.c
+index d1534a5..440a9a9 100644
+--- a/dulwich/_pack.c
++++ b/dulwich/_pack.c
+@@ -20,6 +20,8 @@
+ #include <Python.h>
+ #include <stdint.h>
+ 
++static PyObject *PyExc_ApplyDeltaError = NULL;
++
+ static int py_is_sha(PyObject *sha)
+ {
+ 	if (!PyString_CheckExact(sha))
+@@ -103,7 +105,7 @@ static PyObject *py_apply_delta(PyObject *self, PyObject *args)
+ 	index = 0;
+ 	src_size = get_delta_header_size(delta, &index, delta_len);
+ 	if (src_size != src_buf_len) {
+-		PyErr_Format(PyExc_ValueError, 
++		PyErr_Format(PyExc_ApplyDeltaError,
+ 					 "Unexpected source buffer size: %lu vs %d", src_size, src_buf_len);
+ 		Py_DECREF(py_src_buf);
+ 		Py_DECREF(py_delta);
+@@ -146,12 +148,16 @@ static PyObject *py_apply_delta(PyObject *self, PyObject *args)
+ 				break;
+ 			memcpy(out+outindex, src_buf+cp_off, cp_size);
+ 			outindex += cp_size;
++			dest_size -= cp_size;
+ 		} else if (cmd != 0) {
++			if (cmd > dest_size)
++				break;
+ 			memcpy(out+outindex, delta+index, cmd);
+ 			outindex += cmd;
+ 			index += cmd;
++			dest_size -= cmd;
+ 		} else {
+-			PyErr_SetString(PyExc_ValueError, "Invalid opcode 0");
++			PyErr_SetString(PyExc_ApplyDeltaError, "Invalid opcode 0");
+ 			Py_DECREF(ret);
+ 			Py_DECREF(py_delta);
+ 			Py_DECREF(py_src_buf);
+@@ -162,13 +168,13 @@ static PyObject *py_apply_delta(PyObject *self, PyObject *args)
+ 	Py_DECREF(py_delta);
+ 
+ 	if (index != delta_len) {
+-		PyErr_SetString(PyExc_ValueError, "delta not empty");
++		PyErr_SetString(PyExc_ApplyDeltaError, "delta not empty");
+ 		Py_DECREF(ret);
+ 		return NULL;
+ 	}
+ 
+-	if (dest_size != outindex) {
+-		PyErr_SetString(PyExc_ValueError, "dest size incorrect");
++	if (dest_size != 0) {
++		PyErr_SetString(PyExc_ApplyDeltaError, "dest size incorrect");
+ 		Py_DECREF(ret);
+ 		return NULL;
+ 	}
+@@ -236,6 +242,15 @@ static PyMethodDef py_pack_methods[] = {
+ void init_pack(void)
+ {
+ 	PyObject *m;
++	PyObject *errors_module;
++
++	errors_module = PyImport_ImportModule("dulwich.errors");
++	if (errors_module == NULL)
++		return;
++
++	PyExc_ApplyDeltaError = PyObject_GetAttrString(errors_module, "ApplyDeltaError");
++	if (PyExc_ApplyDeltaError == NULL)
++		return;
+ 
+ 	m = Py_InitModule3("_pack", py_pack_methods, NULL);
+ 	if (m == NULL)
+diff --git a/dulwich/tests/test_pack.py b/dulwich/tests/test_pack.py
+index d33104f..393b931 100644
+--- a/dulwich/tests/test_pack.py
++++ b/dulwich/tests/test_pack.py
+@@ -28,6 +28,7 @@ import tempfile
+ import zlib
+ 
+ from dulwich.errors import (
++    ApplyDeltaError,
+     ChecksumMismatch,
+     )
+ from dulwich.file import (
+@@ -181,6 +182,14 @@ class TestPackDeltas(TestCase):
+         self.skipTest("big strings don't work yet")
+         self._test_roundtrip(self.test_string_huge, self.test_string_huge)
+ 
++    def test_dest_overflow(self):
++        self.assertRaises(
++            ApplyDeltaError,
++            apply_delta, 'a'*0x10000, '\x80\x80\x04\x80\x80\x04\x80' + 'a'*0x10000)
++        self.assertRaises(
++            ApplyDeltaError,
++            apply_delta, '', '\x00\x80\x02\xb0\x11\x11')
++
+ 
+ class TestPackData(PackTests):
+     """Tests getting the data from the packfile."""

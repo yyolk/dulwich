@@ -402,8 +402,14 @@ def index_entry_from_stat(stat_val, hex_sha, flags, mode=None):
             stat_val.st_gid, stat_val.st_size, hex_sha, flags)
 
 
+def validate_path_default(path):
+    """Default path validator that just checks for .git/."""
+    return not path.startswith(".git/")
+
+
 def build_index_from_tree(prefix, index_path, object_store, tree_id,
-                          honor_filemode=True):
+                          honor_filemode=True,
+                          validate_path=validate_path_default):
     """Generate and materialize index from a tree
 
     :param tree_id: Tree to materialize
@@ -412,6 +418,8 @@ def build_index_from_tree(prefix, index_path, object_store, tree_id,
     :param object_store: Non-empty object store holding tree contents
     :param honor_filemode: An optional flag to honor core.filemode setting in
         config file, default is core.filemode=True, change executable bit
+    :param validate_path: Function to validate paths to check out;
+        default just refuses filenames starting with .git/.
 
     :note:: existing index is wiped and contents are not merged
         in a working dir. Suiteable only for fresh clones.
@@ -420,6 +428,8 @@ def build_index_from_tree(prefix, index_path, object_store, tree_id,
     index = Index(index_path)
 
     for entry in object_store.iter_tree_contents(tree_id):
+        if not validate_path(entry.path):
+            continue
         full_path = os.path.join(prefix, entry.path)
 
         if not os.path.exists(os.path.dirname(full_path)):
