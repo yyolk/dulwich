@@ -1,4 +1,4 @@
-dulwich (0.9.7-3) UNRELEASED; urgency=medium
+dulwich (0.9.7-3) testing-proposed-updates; urgency=medium
 
   * Add 02_cve_2015-0838: Fix buffer overflow in C implementation of
     apply_delta (CVE-2015-0838). Closes: #780958
