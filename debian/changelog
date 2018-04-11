@@ -1,4 +1,4 @@
-dulwich (0.19.2-1) UNRELEASED; urgency=medium
+dulwich (0.19.2-1) unstable; urgency=medium
 
   * nmu: New upstream release
   * Be os.path.sep-independent.
