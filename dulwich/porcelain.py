@@ -377,7 +377,7 @@ def add(repo=".", paths=None):
             paths = [paths]
         for p in paths:
             relpath = os.path.relpath(p, r.path)
-            if relpath.startswith('../'):
+            if relpath.startswith('..' + os.path.sep):
                 raise ValueError('path %r is not in repo' % relpath)
             # FIXME: Support patterns, directories.
             if ignore_manager.is_ignored(relpath):
@@ -1239,3 +1239,21 @@ def check_mailmap(repo, contact):
                 raise
             mailmap = Mailmap()
         return mailmap.lookup(contact)
+
+
+def fsck(repo):
+    """Check a repository.
+
+    :param repo: A path to the repository
+    :return: Iterator over errors/warnings
+    """
+    with open_repo_closing(repo) as r:
+        # TODO(jelmer): check pack files
+        # TODO(jelmer): check graph
+        # TODO(jelmer): check refs
+        for sha in r.object_store:
+            o = r.object_store[sha]
+            try:
+                o.check()
+            except Exception as e:
+                yield (sha, e)

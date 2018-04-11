@@ -134,6 +134,7 @@ class CloneTests(PorcelainTestCase):
         self.addCleanup(shutil.rmtree, target_path)
         r = porcelain.clone(self.repo.path, target_path,
                             checkout=False, errstream=errstream)
+        self.addCleanup(r.close)
         self.assertEqual(r.path, target_path)
         target_repo = Repo(target_path)
         self.assertEqual(0, len(target_repo.open_index()))
@@ -1292,3 +1293,22 @@ Jelmer Vernooij <jelmer@debian.org>
             b'Jelmer Vernooij <jelmer@debian.org>',
             porcelain.check_mailmap(
                 self.repo, b'Jelmer Vernooij <jelmer@samba.org>'))
+
+
+class FsckTests(PorcelainTestCase):
+
+    def test_none(self):
+        self.assertEqual(
+                [],
+                list(porcelain.fsck(self.repo)))
+
+    def test_git_dir(self):
+        obj = Tree()
+        a = Blob()
+        a.data = b"foo"
+        obj.add(b".git", 0o100644, a.id)
+        self.repo.object_store.add_objects(
+            [(a, None), (obj, None)])
+        self.assertEqual(
+                [(obj.id, 'invalid name .git')],
+                [(sha, str(e)) for (sha, e) in porcelain.fsck(self.repo)])
