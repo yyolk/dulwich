@@ -1,9 +1,9 @@
-dulwich (0.20.2-2) UNRELEASED; urgency=medium
+dulwich (0.20.2-2) unstable; urgency=medium
 
   * Drop pypy-dulwich package.
   * Set Rules-Requires-Root: no.
 
- -- Jelmer Vernooĳ <jelmer@debian.org>  Mon, 01 Jun 2020 23:05:56 +0000
+ -- Jelmer Vernooĳ <jelmer@debian.org>  Mon, 01 Jun 2020 23:17:27 +0000
 
 dulwich (0.20.2-1) unstable; urgency=medium
 
