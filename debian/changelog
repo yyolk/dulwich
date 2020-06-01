@@ -1,6 +1,7 @@
 dulwich (0.20.2-1) UNRELEASED; urgency=medium
 
   * New upstream release.
+  * Drop patch 01_no_urllib3_pypy: applied upstream.
 
  -- Jelmer Vernooĳ <jelmer@debian.org>  Mon, 01 Jun 2020 22:55:56 +0000
 
