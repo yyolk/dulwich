@@ -79,6 +79,37 @@ PACKDIR = "pack"
 PACK_MODE = 0o444 if sys.platform != "win32" else 0o644
 
 
+def get_depth(
+    store, head, get_parents=lambda commit: commit.parents, max_depth=None,
+):
+    """Return the current available depth for the given head.
+    For commits with multiple parents, the largest possible depth will be
+    returned.
+
+    Args:
+        head: commit to start from
+        get_parents: optional function for getting the parents of a commit
+        max_depth: maximum depth to search
+    """
+    if head not in store:
+        return 0
+    current_depth = 1
+    queue = [(head, current_depth)]
+    while queue and (max_depth is None or current_depth < max_depth):
+        e, depth = queue.pop(0)
+        current_depth = max(current_depth, depth)
+        cmt = store[e]
+        if isinstance(cmt, Tag):
+            _cls, sha = cmt.object
+            cmt = store[sha]
+        queue.extend(
+            (parent, depth + 1)
+            for parent in get_parents(cmt)
+            if parent in store
+        )
+    return current_depth
+
+
 class BaseObjectStore(object):
     """Object store interface."""
 
@@ -388,23 +419,7 @@ class BaseObjectStore(object):
             get_parents: optional function for getting the parents of a commit
             max_depth: maximum depth to search
         """
-        if head not in self:
-            return 0
-        current_depth = 1
-        queue = [(head, current_depth)]
-        while queue and (max_depth is None or current_depth < max_depth):
-            e, depth = queue.pop(0)
-            current_depth = max(current_depth, depth)
-            cmt = self[e]
-            if isinstance(cmt, Tag):
-                _cls, sha = cmt.object
-                cmt = self[sha]
-            queue.extend(
-                (parent, depth + 1)
-                for parent in get_parents(cmt)
-                if parent in self
-            )
-        return current_depth
+        return get_depth(self, head, get_parents=get_parents, max_depth=max_depth)
 
     def close(self):
         """Close any files opened by this object store."""
