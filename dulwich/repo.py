@@ -758,7 +758,7 @@ class BaseRepo(object):
         return self.object_store.peel_sha(self.refs[ref]).id
 
     def get_walker(self, include: Optional[List[bytes]] = None,
-                   *args, **kwargs):
+                   **kwargs):
         """Obtain a walker for this repository.
 
         Args:
@@ -791,7 +791,7 @@ class BaseRepo(object):
 
         kwargs["get_parents"] = lambda commit: self.get_parents(commit.id, commit)
 
-        return Walker(self.object_store, include, *args, **kwargs)
+        return Walker(self.object_store, include, **kwargs)
 
     def __getitem__(self, name: Union[ObjectID, Ref]):
         """Retrieve a Git object by SHA1 or ref.
