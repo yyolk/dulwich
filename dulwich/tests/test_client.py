@@ -184,7 +184,7 @@ class GitClientTests(TestCase):
             self.assertEqual({}, heads)
             return []
 
-        ret = self.client.fetch_pack(b"bla", check_heads, None, None, None)
+        ret = self.client.fetch_pack(b"bla", check_heads, None, None)
         self.assertEqual({}, ret.refs)
         self.assertEqual({}, ret.symrefs)
         self.assertEqual(self.rout.getvalue(), b"0000")
@@ -197,7 +197,7 @@ class GitClientTests(TestCase):
             b"0000"
         )
         self.rin.seek(0)
-        ret = self.client.fetch_pack(b"bla", lambda heads, **kwargs: [], None, None, None)
+        ret = self.client.fetch_pack(b"bla", lambda heads, **kwargs: [], None, None)
         self.assertEqual(
             {b"HEAD": b"55dcc6bf963f922e1ed5c4bbaaefcfacef57b1d7"}, ret.refs
         )
@@ -891,7 +891,7 @@ class LocalGitClientTests(TestCase):
         s = open_repo("a.git")
         self.addCleanup(tear_down_repo, s)
         out = BytesIO()
-        walker = {}
+        walker = MemoryRepo().get_graph_walker()
         ret = c.fetch_pack(
             s.path, lambda heads, **kwargs: [], graph_walker=walker, pack_data=out.write
         )

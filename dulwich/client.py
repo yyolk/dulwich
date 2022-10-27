@@ -519,7 +519,7 @@ def _read_side_band64k_data(pkt_seq, channel_callbacks):
 
 
 def _handle_upload_pack_head(
-    proto, capabilities, graph_walker, wants, can_read, depth
+    proto, capabilities, graph_walker, wants, can_read, depth: Optional[int] = None
 ):
     """Handle the head of a 'git-upload-pack' request.
 
@@ -721,8 +721,10 @@ class GitClient(object):
         """
         raise NotImplementedError(self.send_pack)
 
-    def clone(self, path, target_path, mkdir: bool = True, bare=False, origin="origin",
-              checkout=None, branch=None, progress=None, depth=None):
+    def clone(self, path, target_path,
+              mkdir: bool = True, bare=False, origin="origin",
+              checkout=None, branch=None, progress=None,
+              depth: Optional[int] = None):
         """Clone a repository."""
         from .refs import _set_origin_head, _set_default_branch, _set_head
 
@@ -758,6 +760,7 @@ class GitClient(object):
 
             ref_message = b"clone: from " + encoded_path
             result = self.fetch(path, target, progress=progress, depth=depth)
+
             _import_remote_refs(
                 target.refs, origin, result.refs, message=ref_message)
 
@@ -857,7 +860,7 @@ class GitClient(object):
         graph_walker,
         pack_data,
         progress=None,
-        depth=None,
+        depth: Optional[int] = None,
     ):
         """Retrieve a pack from a git smart server.
 
@@ -1125,7 +1128,7 @@ class TraditionalGitClient(GitClient):
         graph_walker,
         pack_data,
         progress=None,
-        depth=None,
+        depth: Optional[int] = None,
     ):
         """Retrieve a pack from a git smart server.
 
@@ -1483,7 +1486,8 @@ class LocalGitClient(GitClient):
 
         return SendPackResult(new_refs, ref_status=ref_status)
 
-    def fetch(self, path, target, determine_wants=None, progress=None, depth=None):
+    def fetch(self, path, target, determine_wants=None, progress=None,
+              depth: Optional[int] = None):
         """Fetch into a target repository.
 
         Args:
@@ -1515,7 +1519,7 @@ class LocalGitClient(GitClient):
         graph_walker,
         pack_data,
         progress=None,
-        depth=None,
+        depth: Optional[int] = None,
     ):
         """Retrieve a pack from a git smart server.
 
@@ -2056,7 +2060,7 @@ class AbstractHttpGitClient(GitClient):
         graph_walker,
         pack_data,
         progress=None,
-        depth=None,
+        depth: Optional[int] = None,
     ):
         """Retrieve a pack from a git smart server.
 

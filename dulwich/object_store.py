@@ -1380,7 +1380,7 @@ class MissingObjectFinder(object):
     def add_todo(self, entries):
         self.objects_to_send.update([e for e in entries if not e[0] in self.sha_done])
 
-    def next(self):
+    def __next__(self):
         while True:
             if not self.objects_to_send:
                 return None
@@ -1407,7 +1407,7 @@ class MissingObjectFinder(object):
         self.progress(("counting objects: %d\r" % len(self.sha_done)).encode("ascii"))
         return (sha, name)
 
-    __next__ = next
+    next = __next__
 
 
 class ObjectStoreGraphWalker(object):
@@ -1418,7 +1418,7 @@ class ObjectStoreGraphWalker(object):
       get_parents: Function to retrieve parents in the local repo
     """
 
-    def __init__(self, local_heads, get_parents, shallow=None):
+    def __init__(self, local_heads, get_parents, shallow=None, update_shallow=None):
         """Create a new instance.
 
         Args:
@@ -1431,6 +1431,7 @@ class ObjectStoreGraphWalker(object):
         if shallow is None:
             shallow = set()
         self.shallow = shallow
+        self.update_shallow = update_shallow
 
     def ack(self, sha):
         """Ack that a revision and its ancestors are present in the source."""
@@ -1458,7 +1459,7 @@ class ObjectStoreGraphWalker(object):
 
             ancestors = new_ancestors
 
-    def next(self):
+    def __next__(self):
         """Iterate over ancestors of heads in the target."""
         if self.heads:
             ret = self.heads.pop()
@@ -1471,7 +1472,7 @@ class ObjectStoreGraphWalker(object):
             return ret
         return None
 
-    __next__ = next
+    next = __next__
 
 
 def commit_tree_changes(object_store, tree, changes):
