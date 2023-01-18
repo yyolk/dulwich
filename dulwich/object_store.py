@@ -22,6 +22,7 @@
 
 """Git object store interfaces and implementation."""
 
+from contextlib import suppress
 from io import BytesIO
 import os
 import stat
@@ -77,7 +78,7 @@ from dulwich.pack import (
     PACK_SPOOL_FILE_MAX_SIZE,
 )
 from dulwich.protocol import DEPTH_INFINITE
-from dulwich.refs import ANNOTATED_TAG_SUFFIX, Ref
+from dulwich.refs import PEELED_TAG_SUFFIX, Ref
 
 INFODIR = "info"
 PACKDIR = "pack"
@@ -115,7 +116,7 @@ class BaseObjectStore:
             sha
             for (ref, sha) in refs.items()
             if (sha not in self or _want_deepen(sha))
-            and not ref.endswith(ANNOTATED_TAG_SUFFIX)
+            and not ref.endswith(PEELED_TAG_SUFFIX)
             and not sha == ZERO_SHA
         ]
 
@@ -277,7 +278,7 @@ class BaseObjectStore:
         warnings.warn(
             "Please use dulwich.object_store.peel_sha()",
             DeprecationWarning, stacklevel=2)
-        return peel_sha(self, sha)
+        return peel_sha(self, sha)[1]
 
     def _get_depth(
         self, head, get_parents=lambda commit: commit.parents, max_depth=None,
@@ -803,7 +804,7 @@ class DiskObjectStore(PackBasedObjectStore):
         suffix = suffix.decode("ascii")
         return os.path.join(self.pack_dir, "pack-" + suffix)
 
-    def _complete_thin_pack(self, f, path, copier, indexer, progress=None):
+    def _complete_pack(self, f, path, num_objects, indexer, progress=None):
         """Move a specific file containing a pack into the pack directory.
 
         Note: The file should be on the same file system as the
@@ -812,41 +813,48 @@ class DiskObjectStore(PackBasedObjectStore):
         Args:
           f: Open file object for the pack.
           path: Path to the pack file.
-          copier: A PackStreamCopier to use for writing pack data.
           indexer: A PackIndexer for indexing the pack.
         """
         entries = []
         for i, entry in enumerate(indexer):
             if progress is not None:
-                progress(("generating index: %d/%d\r" % (i, len(copier))).encode('ascii'))
+                progress(("generating index: %d/%d\r" % (i, num_objects)).encode('ascii'))
             entries.append(entry)
 
         pack_sha, extra_entries = extend_pack(
             f, indexer.ext_refs(), get_raw=self.get_raw, compression_level=self.pack_compression_level,
             progress=progress)
+        f.flush()
+        try:
+            fileno = f.fileno()
+        except AttributeError:
+            pass
+        else:
+            os.fsync(fileno)
+        f.close()
 
         entries.extend(extra_entries)
 
         # Move the pack in.
         entries.sort()
         pack_base_name = self._get_pack_basepath(entries)
-        target_pack = pack_base_name + ".pack"
+
+        for pack in self.packs:
+            if pack._basename == pack_base_name:
+                return pack
+
+        target_pack_path = pack_base_name + ".pack"
+        target_index_path = pack_base_name + ".idx"
         if sys.platform == "win32":
             # Windows might have the target pack file lingering. Attempt
             # removal, silently passing if the target does not exist.
-            try:
-                os.remove(target_pack)
-            except FileNotFoundError:
-                pass
-        os.rename(path, target_pack)
+            with suppress(FileNotFoundError):
+                os.remove(target_pack_path)
+        os.rename(path, target_pack_path)
 
         # Write the index.
-        index_file = GitFile(pack_base_name + ".idx", "wb", mask=PACK_MODE)
-        try:
+        with GitFile(target_index_path, "wb", mask=PACK_MODE) as index_file:
             write_pack_index(index_file, entries, pack_sha)
-            index_file.close()
-        finally:
-            index_file.abort()
 
         # Add the pack to the store and return it.
         final_pack = Pack(pack_base_name)
@@ -877,39 +885,7 @@ class DiskObjectStore(PackBasedObjectStore):
             indexer = PackIndexer(f, resolve_ext_ref=self.get_raw)
             copier = PackStreamCopier(read_all, read_some, f, delta_iter=indexer)
             copier.verify(progress=progress)
-            return self._complete_thin_pack(f, path, copier, indexer, progress=progress)
-
-    def move_in_pack(self, path):
-        """Move a specific file containing a pack into the pack directory.
-
-        Note: The file should be on the same file system as the
-            packs directory.
-
-        Args:
-          path: Path to the pack file.
-        """
-        with PackData(path) as p:
-            entries = p.sorted_entries()
-            basename = self._get_pack_basepath(entries)
-            index_name = basename + ".idx"
-            if not os.path.exists(index_name):
-                with GitFile(index_name, "wb", mask=PACK_MODE) as f:
-                    write_pack_index(f, entries, p.get_stored_checksum())
-        for pack in self.packs:
-            if pack._basename == basename:
-                return pack
-        target_pack = basename + ".pack"
-        if sys.platform == "win32":
-            # Windows might have the target pack file lingering. Attempt
-            # removal, silently passing if the target does not exist.
-            try:
-                os.remove(target_pack)
-            except FileNotFoundError:
-                pass
-        os.rename(path, target_pack)
-        final_pack = Pack(basename)
-        self._add_cached_pack(basename, final_pack)
-        return final_pack
+            return self._complete_pack(f, path, len(copier), indexer, progress=progress)
 
     def add_pack(self):
         """Add a new pack to this object store.
@@ -921,16 +897,17 @@ class DiskObjectStore(PackBasedObjectStore):
         import tempfile
 
         fd, path = tempfile.mkstemp(dir=self.pack_dir, suffix=".pack")
-        f = os.fdopen(fd, "wb")
+        f = os.fdopen(fd, "w+b")
         os.chmod(path, PACK_MODE)
 
         def commit():
-            f.flush()
-            os.fsync(fd)
-            f.close()
-            if os.path.getsize(path) > 0:
-                return self.move_in_pack(path)
+            if f.tell() > 0:
+                f.seek(0)
+                with PackData(path, f) as pd:
+                    indexer = PackIndexer.for_pack_data(pd, resolve_ext_ref=self.get_raw)
+                    return self._complete_pack(f, path, len(pd), indexer)
             else:
+                f.close()
                 os.remove(path)
                 return None
 
@@ -1048,14 +1025,17 @@ class MemoryObjectStore(BaseObjectStore):
 
         def commit():
             size = f.tell()
-            f.seek(0)
-            p = PackData.from_file(f, size)
-            for obj in PackInflater.for_pack_data(p, self.get_raw):
-                self.add_object(obj)
-            p.close()
+            if size > 0:
+                f.seek(0)
+                p = PackData.from_file(f, size)
+                for obj in PackInflater.for_pack_data(p, self.get_raw):
+                    self.add_object(obj)
+                p.close()
+            else:
+                f.close()
 
         def abort():
-            pass
+            f.close()
 
         return f, commit, abort
 
@@ -1642,7 +1622,7 @@ def iter_tree_contents(
             yield entry
 
 
-def peel_sha(store: ObjectContainer, sha: bytes) -> ShaFile:
+def peel_sha(store: ObjectContainer, sha: bytes) -> Tuple[ShaFile, ShaFile]:
     """Peel all tags from a SHA.
 
     Args:
@@ -1651,10 +1631,10 @@ def peel_sha(store: ObjectContainer, sha: bytes) -> ShaFile:
         intermediate tags; if the original ref does not point to a tag,
         this will equal the original SHA1.
     """
-    obj = store[sha]
+    unpeeled = obj = store[sha]
     obj_class = object_class(obj.type_name)
     while obj_class is Tag:
         assert isinstance(obj, Tag)
         obj_class, sha = obj.object
         obj = store[sha]
-    return obj
+    return unpeeled, obj
