@@ -46,13 +46,18 @@ ext_modules = [
               optional=optional),
 ]
 
+rust_extensions = [
+    RustExtension("dulwich._objects", "crates/objects/Cargo.toml", binding=Binding.PyO3, optional = True),
+]
+
 # Ideally, setuptools would just provide a way to do this
 if '--pure' in sys.argv:
     sys.argv.remove('--pure')
     ext_modules = []
+    rust_extensions = []
 
 
 setup(package_data={'': ['../docs/tutorial/*.txt', 'py.typed']},
-      rust_extensions=[RustExtension("dulwich._objects", "Cargo.toml", binding=Binding.PyO3, optional = True)],
       ext_modules=ext_modules,
+      rust_extensions=rust_extensions,
       tests_require=tests_require)
