@@ -6,6 +6,7 @@ import os
 import sys
 
 from setuptools import Extension, setup
+from setuptools_rust import RustExtension, Binding
 
 if sys.version_info < (3, 7):
     raise Exception(
@@ -39,8 +40,6 @@ if '__pypy__' not in sys.modules and sys.platform != 'win32':
 optional = os.environ.get('CIBUILDWHEEL', '0') != '1'
 
 ext_modules = [
-    Extension('dulwich._objects', ['dulwich/_objects.c'],
-              optional=optional),
     Extension('dulwich._pack', ['dulwich/_pack.c'],
               optional=optional),
     Extension('dulwich._diff_tree', ['dulwich/_diff_tree.c'],
@@ -54,5 +53,6 @@ if '--pure' in sys.argv:
 
 
 setup(package_data={'': ['../docs/tutorial/*.txt', 'py.typed']},
+      rust_extensions=[RustExtension("dulwich._objects", "Cargo.toml", binding=Binding.PyO3, optional = True)],
       ext_modules=ext_modules,
       tests_require=tests_require)
