@@ -47,7 +47,7 @@ ext_modules = [
 ]
 
 rust_extensions = [
-    RustExtension("dulwich._objects", "crates/objects/Cargo.toml", binding=Binding.PyO3, optional = True),
+    RustExtension("dulwich._objects", "crates/objects/Cargo.toml", binding=Binding.PyO3, optional=True),
 ]
 
 # Ideally, setuptools would just provide a way to do this
